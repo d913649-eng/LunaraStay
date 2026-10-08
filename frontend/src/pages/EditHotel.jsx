@@ -16,7 +16,7 @@ function EditHotel() {
         const fetchHotel = async () => {
             try {
                 const response = await fetch(
-                    `http://localhost:5000/api/hotels/${id}`
+                    `https://lunara-stay-backend.onrender.com/api/hotels/${id}`
                 );
 
                 if (!response.ok) {
@@ -67,7 +67,7 @@ function EditHotel() {
             });
 
             const response = await fetch(
-                `http://localhost:5000/api/hotels/${id}`,
+                `https://lunara-stay-backend.onrender.com/api/hotels/${id}`,
                 {
                     method: "PUT",
                     body: formData

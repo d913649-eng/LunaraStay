@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
@@ -27,7 +28,7 @@ function AddHotel() {
 
         try {
             const response = await fetch(
-                "http://localhost:5000/api/hotels",
+                "https://lunara-stay-backend.onrender.com/api/hotels",
                 {
                     method: "POST",
                     body: formData,
