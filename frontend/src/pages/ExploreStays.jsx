@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
@@ -13,7 +14,7 @@ function ExploreStays() {
     const hotelsPerPage = 5;
 
     useEffect(() => {
-        fetch("http://localhost:5000/api/hotels")
+        fetch("https://lunara-stay-backend.onrender.com/api/hotels")
             .then((response) => response.json())
             .then((data) => {
                 setHotels(data);
