@@ -1,17 +1,20 @@
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 
 export const fetchHotels = createAsyncThunk(
     "hotels/fetchHotels",
     async () => {
-    const response = await fetch("http://localhost:5000/api/hotels");
+        const response = await fetch(
+            "https://lunara-stay-backend.onrender.com/api/hotels"
+        );
 
-    if (!response.ok) {
-        throw new Error("Failed to fetch hotels");
-    }
+        if (!response.ok) {
+            throw new Error("Failed to fetch hotels");
+        }
 
-    const data = await response.json();
+        const data = await response.json();
 
-    return data;
+        return data;
     }
 );
 
@@ -28,22 +31,23 @@ const hotelSlice = createSlice({
     reducers: {},
 
     extraReducers: (builder) => {
-    builder
-        .addCase(fetchHotels.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-        })
+        builder
+            .addCase(fetchHotels.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
 
-        .addCase(fetchHotels.fulfilled, (state, action) => {
-        state.loading = false;
-        state.hotels = action.payload;
-        })
+            .addCase(fetchHotels.fulfilled, (state, action) => {
+                state.loading = false;
+                state.hotels = action.payload;
+            })
 
-        .addCase(fetchHotels.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.error.message;
-        });
+            .addCase(fetchHotels.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.error.message;
+            });
     },
 });
 
 export default hotelSlice.reducer;
+
