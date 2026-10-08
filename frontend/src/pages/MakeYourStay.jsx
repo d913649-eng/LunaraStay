@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -16,7 +17,7 @@ function MakeYourStay() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/hotels")
+    fetch("https://lunara-stay-backend.onrender.com/api/hotels")
       .then((response) => response.json())
       .then((data) => {
         setHotels(data);
