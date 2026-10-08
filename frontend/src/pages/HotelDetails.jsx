@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -54,7 +55,7 @@ function HotelDetails() {
     useState("");
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/hotels/${id}`)
+    fetch(`https://lunara-stay-backend.onrender.com/api/hotels/${id}`)
       .then((response) => response.json())
       .then((data) => {
         setHotel(data);
@@ -64,7 +65,9 @@ function HotelDetails() {
         console.error("Hotel fetch error:", error);
       });
 
-    fetch(`http://localhost:5000/api/hotels/${id}/reviews`)
+    fetch(
+      `https://lunara-stay-backend.onrender.com/api/hotels/${id}/reviews`
+    )
       .then((response) => response.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -87,7 +90,7 @@ function HotelDetails() {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/hotels/${id}`,
+        `https://lunara-stay-backend.onrender.com/api/hotels/${id}`,
         {
           method: "DELETE",
         }
@@ -1087,3 +1090,4 @@ function HotelDetails() {
 }
 
 export default HotelDetails;
+
