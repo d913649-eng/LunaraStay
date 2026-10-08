@@ -6,6 +6,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const pool = require("./db");
+const cloudinary = require("./cloudinary");
 
 const app = express();
 
@@ -22,23 +23,9 @@ if (!fs.existsSync(uploadsPath)) {
 
 app.use("/uploads", express.static(uploadsPath));
 
-//Multer
+// Multer
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadsPath);
-    },
-
-    filename: (req, file, cb) => {
-        const fileName =
-            Date.now() +
-            "-" +
-            file.originalname.replace(/\s+/g, "-");
-
-        cb(null, fileName);
-    }
-});
-
+const storage = multer.memoryStorage();
 
 const upload = multer({
     storage,
@@ -68,33 +55,169 @@ const upload = multer({
 });
 
 
+// Cloudinary Image Upload
+
+const uploadToCloudinary = (file) => {
+    return new Promise((resolve, reject) => {
+
+        const originalName =
+            path.basename(
+                file.originalname,
+                path.extname(file.originalname)
+            )
+            .replace(/\s+/g, "-")
+            .replace(/[^a-zA-Z0-9-_]/g, "");
+
+        const publicId =
+            `${Date.now()}-${originalName || "hotel-image"}`;
+
+        const stream =
+            cloudinary.uploader.upload_stream(
+                {
+                    folder: "lunara-stay",
+                    public_id: publicId,
+                    resource_type: "image"
+                },
+                (error, result) => {
+
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(result);
+                    }
+                }
+            );
+
+        stream.end(file.buffer);
+    });
+};
+
+
+// Delete Cloudinary Image
+
+const deleteCloudinaryImage = async (imageUrl) => {
+
+    try {
+
+        if (
+            !imageUrl ||
+            typeof imageUrl !== "string"
+        ) {
+            return;
+        }
+
+        if (
+            !imageUrl.includes("res.cloudinary.com")
+        ) {
+            return;
+        }
+
+        const uploadPart =
+            imageUrl.split("/upload/")[1];
+
+        if (!uploadPart) {
+            return;
+        }
+
+        const parts =
+            uploadPart.split("/");
+
+        const versionIndex =
+            parts.findIndex((part) =>
+                /^v\d+$/.test(part)
+            );
+
+        let publicIdParts;
+
+        if (versionIndex !== -1) {
+            publicIdParts =
+                parts.slice(versionIndex + 1);
+        } else {
+            publicIdParts =
+                parts;
+        }
+
+        if (!publicIdParts.length) {
+            return;
+        }
+
+        const lastIndex =
+            publicIdParts.length - 1;
+
+        publicIdParts[lastIndex] =
+            publicIdParts[lastIndex]
+                .replace(/\.[^/.]+$/, "");
+
+        const publicId =
+            publicIdParts.join("/");
+
+        await cloudinary.uploader.destroy(
+            publicId,
+            {
+                resource_type: "image"
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Cloudinary image delete error:",
+            error.message
+        );
+    }
+};
+
+
 //Delete Image
 
-const deleteImageFile = (imagePath) => {
+const deleteImageFile = async (imagePath) => {
+
     try {
+
         if (!imagePath) {
             return;
         }
 
         if (
-            typeof imagePath !== "string" ||
+            typeof imagePath !== "string"
+        ) {
+            return;
+        }
+
+        // Cloudinary image
+        if (
+            imagePath.includes("res.cloudinary.com")
+        ) {
+
+            await deleteCloudinaryImage(
+                imagePath
+            );
+
+            return;
+        }
+
+        // Old local upload image
+        if (
             !imagePath.startsWith("/uploads/")
         ) {
             return;
         }
 
-        const fileName = path.basename(imagePath);
+        const fileName =
+            path.basename(imagePath);
 
-        const filePath = path.join(
-            uploadsPath,
-            fileName
-        );
+        const filePath =
+            path.join(
+                uploadsPath,
+                fileName
+            );
 
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
 
     } catch (error) {
+
         console.error(
             "Image delete error:",
             error.message
@@ -102,20 +225,30 @@ const deleteImageFile = (imagePath) => {
     }
 };
 
-const deleteImageFiles = (images) => {
+const deleteImageFiles = async (images) => {
+
     if (!Array.isArray(images)) {
         return;
     }
 
-    images.forEach((image) => {
-        deleteImageFile(image);
-    });
+    await Promise.all(
+        images.map((image) =>
+            deleteImageFile(image)
+        )
+    );
 };
+
+
 //Geocoding
 
 const searchLocation = async (query) => {
+
     try {
-        if (!query || !query.trim()) {
+
+        if (
+            !query ||
+            !query.trim()
+        ) {
             return null;
         }
 
@@ -127,28 +260,35 @@ const searchLocation = async (query) => {
                 limit: "1"
             });
 
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": "LunaraStay/1.0"
-            }
-        });
+        const response =
+            await fetch(url, {
+                headers: {
+                    "User-Agent":
+                        "LunaraStay/1.0"
+                }
+            });
 
         if (!response.ok) {
             return null;
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         if (!data.length) {
             return null;
         }
 
         return {
-            latitude: Number(data[0].lat),
-            longitude: Number(data[0].lon)
+            latitude:
+                Number(data[0].lat),
+
+            longitude:
+                Number(data[0].lon)
         };
 
     } catch (error) {
+
         console.error(
             "Location search error:",
             error.message
@@ -166,8 +306,11 @@ const getCoordinates = async (
     longitude
 ) => {
 
-    const givenLatitude = Number(latitude);
-    const givenLongitude = Number(longitude);
+    const givenLatitude =
+        Number(latitude);
+
+    const givenLongitude =
+        Number(longitude);
 
     if (
         Number.isFinite(givenLatitude) &&
@@ -177,6 +320,7 @@ const getCoordinates = async (
         givenLongitude >= -180 &&
         givenLongitude <= 180
     ) {
+
         return {
             latitude: givenLatitude,
             longitude: givenLongitude
@@ -191,7 +335,8 @@ const getCoordinates = async (
 
     for (const query of queries) {
 
-        const result = await searchLocation(query);
+        const result =
+            await searchLocation(query);
 
         if (result) {
             return result;
@@ -221,7 +366,11 @@ const validateHotelData = (data) => {
     } = data;
 
 
-    if (!title || title.trim().length < 3) {
+    if (
+        !title ||
+        title.trim().length < 3
+    ) {
+
         return "Hotel title must contain at least 3 characters.";
     }
 
@@ -230,11 +379,16 @@ const validateHotelData = (data) => {
         !description ||
         description.trim().length < 10
     ) {
+
         return "Description must contain at least 10 characters.";
     }
 
 
-    if (!location || location.trim().length === 0) {
+    if (
+        !location ||
+        location.trim().length === 0
+    ) {
+
         return "Hotel location is required.";
     }
 
@@ -243,27 +397,32 @@ const validateHotelData = (data) => {
         !address ||
         address.trim().length < 5
     ) {
+
         return "Valid hotel address is required.";
     }
 
 
-    const numericPrice = Number(price);
+    const numericPrice =
+        Number(price);
 
     if (
         !Number.isFinite(numericPrice) ||
         numericPrice < 1000 ||
         numericPrice > 100000
     ) {
+
         return "Price must be between ₹1,000 and ₹1,00,000.";
     }
 
 
-    const rooms = Number(total_rooms);
+    const rooms =
+        Number(total_rooms);
 
     if (
         !Number.isInteger(rooms) ||
         rooms < 1
     ) {
+
         return "Total rooms must be at least 1.";
     }
 
@@ -272,6 +431,7 @@ const validateHotelData = (data) => {
         !hotel_type ||
         hotel_type.trim().length === 0
     ) {
+
         return "Hotel type is required.";
     }
 
@@ -279,12 +439,16 @@ const validateHotelData = (data) => {
     let amenitiesArray = [];
 
     if (amenities) {
+
         try {
+
             amenitiesArray =
                 typeof amenities === "string"
                     ? JSON.parse(amenities)
                     : amenities;
+
         } catch {
+
             return "Invalid amenities format.";
         }
     }
@@ -294,6 +458,7 @@ const validateHotelData = (data) => {
         !Array.isArray(amenitiesArray) ||
         amenitiesArray.length === 0
     ) {
+
         return "At least one amenity is required.";
     }
 
@@ -301,37 +466,45 @@ const validateHotelData = (data) => {
     return null;
 };
 
-app.get("/", async (req, res) => {
 
-    try {
+app.get(
+    "/",
+    async (req, res) => {
 
-        const result = await pool.query(
-            "SELECT NOW()"
-        );
+        try {
 
-        res.json({
-            message:
-                "Lunara Stay backend is running",
+            const result =
+                await pool.query(
+                    "SELECT NOW()"
+                );
 
-            database:
-                result.rows[0]
-        });
+            res.json({
+                message:
+                    "Lunara Stay backend is running",
 
-    } catch (error) {
+                database:
+                    result.rows[0]
+            });
 
-        console.error(error);
+        } catch (error) {
 
-        res.status(500).json({
-            message:
-                "Database connection failed"
-        });
+            console.error(error);
+
+            res.status(500).json({
+                message:
+                    "Database connection failed"
+            });
+        }
     }
-});
+);
+
+
+// Single Image Upload
 
 app.post(
     "/api/upload",
     upload.single("image"),
-    (req, res) => {
+    async (req, res) => {
 
         try {
 
@@ -344,13 +517,19 @@ app.post(
             }
 
 
+            const uploaded =
+                await uploadToCloudinary(
+                    req.file
+                );
+
+
             res.json({
 
                 message:
                     "Image uploaded successfully",
 
                 image:
-                    `/uploads/${req.file.filename}`
+                    uploaded.secure_url
 
             });
 
@@ -398,13 +577,6 @@ app.post(
 
             if (validationError) {
 
-                deleteImageFiles(
-                    req.files?.map(
-                        (file) =>
-                            `/uploads/${file.filename}`
-                    ) || []
-                );
-
                 return res.status(400).json({
                     message:
                         validationError
@@ -423,14 +595,9 @@ app.post(
             }
 
 
-            if (req.files.length > 3) {
-
-                deleteImageFiles(
-                    req.files.map(
-                        (file) =>
-                            `/uploads/${file.filename}`
-                    )
-                );
+            if (
+                req.files.length > 3
+            ) {
 
                 return res.status(400).json({
                     message:
@@ -438,11 +605,26 @@ app.post(
                 });
             }
 
-            const imagePaths =
-                req.files.map(
-                    (file) =>
-                        `/uploads/${file.filename}`
+
+            // Upload images to Cloudinary
+
+            const uploadedImages =
+                await Promise.all(
+                    req.files.map(
+                        (file) =>
+                            uploadToCloudinary(
+                                file
+                            )
+                    )
                 );
+
+
+            const imagePaths =
+                uploadedImages.map(
+                    (image) =>
+                        image.secure_url
+                );
+
 
             const mainImage =
                 imagePaths[0];
@@ -459,7 +641,7 @@ app.post(
 
             } catch {
 
-                deleteImageFiles(
+                await deleteImageFiles(
                     imagePaths
                 );
 
@@ -468,6 +650,7 @@ app.post(
                         "Invalid amenities format"
                 });
             }
+
 
             const coordinates =
                 await getCoordinates(
@@ -541,6 +724,8 @@ app.post(
         }
     }
 );
+
+
 //Get All Hotels
 
 app.get(
@@ -573,7 +758,10 @@ app.get(
                     )
                 `;
 
-                values.push(`%${search}%`);
+                values.push(
+                    `%${search}%`
+                );
+
                 number++;
             }
 
@@ -583,7 +771,10 @@ app.get(
                 query +=
                     ` AND price >= $${number}`;
 
-                values.push(Number(minPrice));
+                values.push(
+                    Number(minPrice)
+                );
+
                 number++;
             }
 
@@ -593,7 +784,10 @@ app.get(
                 query +=
                     ` AND price <= $${number}`;
 
-                values.push(Number(maxPrice));
+                values.push(
+                    Number(maxPrice)
+                );
+
                 number++;
             }
 
@@ -607,7 +801,10 @@ app.get(
                 query +=
                     ` LIMIT $${number}`;
 
-                values.push(Number(limit));
+                values.push(
+                    Number(limit)
+                );
+
                 number++;
             }
 
@@ -617,7 +814,9 @@ app.get(
                 query +=
                     ` OFFSET $${number}`;
 
-                values.push(Number(offset));
+                values.push(
+                    Number(offset)
+                );
             }
 
 
@@ -646,6 +845,8 @@ app.get(
         }
     }
 );
+
+
 //Get Single Hotel
 
 app.get(
@@ -697,7 +898,9 @@ app.get(
         }
     }
 );
-//Add Images
+
+
+//Add Images / Update Hotel
 
 app.put(
     "/api/hotels/:id",
@@ -756,28 +959,18 @@ app.put(
                 });
             }
 
+
             const validationError =
                 validateHotelData(req.body);
 
             if (validationError) {
-
-                const uploadedFiles =
-                    Object.values(
-                        req.files || {}
-                    ).flat();
-
-                deleteImageFiles(
-                    uploadedFiles.map(
-                        (file) =>
-                            `/uploads/${file.filename}`
-                    )
-                );
 
                 return res.status(400).json({
                     message:
                         validationError
                 });
             }
+
 
             let amenitiesArray = [];
 
@@ -796,14 +989,19 @@ app.put(
                 });
             }
 
+
             const oldHotel =
                 existingHotel.rows[0];
+
 
             let image =
                 oldHotel.image;
 
+
             let images =
-                Array.isArray(oldHotel.images)
+                Array.isArray(
+                    oldHotel.images
+                )
                     ? oldHotel.images
                     : oldHotel.image
                         ? [oldHotel.image]
@@ -820,13 +1018,6 @@ app.put(
                 uploadedFiles.length > 3
             ) {
 
-                deleteImageFiles(
-                    uploadedFiles.map(
-                        (file) =>
-                            `/uploads/${file.filename}`
-                    )
-                );
-
                 return res.status(400).json({
                     message:
                         "Maximum 3 hotel images are allowed"
@@ -834,28 +1025,45 @@ app.put(
             }
 
 
+            let oldImagesToDelete = [];
+
+
             if (
                 uploadedFiles.length > 0
             ) {
 
-                const newImagePaths =
-                    uploadedFiles.map(
-                        (file) =>
-                            `/uploads/${file.filename}`
-                    );
-//Delete Images
+                // Upload new images to Cloudinary
 
-                deleteImageFiles(
-                    images
-                );
+                const uploadedImages =
+                    await Promise.all(
+                        uploadedFiles.map(
+                            (file) =>
+                                uploadToCloudinary(
+                                    file
+                                )
+                        )
+                    );
+
+
+                const newImagePaths =
+                    uploadedImages.map(
+                        (uploadedImage) =>
+                            uploadedImage.secure_url
+                    );
+
+
+                oldImagesToDelete =
+                    images;
 
 
                 images =
                     newImagePaths;
 
+
                 image =
                     newImagePaths[0];
             }
+
 
             const coordinates =
                 await getCoordinates(
@@ -864,6 +1072,7 @@ app.put(
                     latitude,
                     longitude
                 );
+
 
             const result =
                 await pool.query(
@@ -903,6 +1112,19 @@ app.put(
                 );
 
 
+            // Delete old Cloudinary images
+            // only after successful database update
+
+            if (
+                oldImagesToDelete.length > 0
+            ) {
+
+                await deleteImageFiles(
+                    oldImagesToDelete
+                );
+            }
+
+
             res.json(
                 result.rows[0]
             );
@@ -924,6 +1146,7 @@ app.put(
         }
     }
 );
+
 
 //Delete Hotel
 
@@ -964,17 +1187,24 @@ app.delete(
 
             let images = [];
 
+
             if (
-                Array.isArray(hotel.images)
+                Array.isArray(
+                    hotel.images
+                )
             ) {
+
                 images =
                     hotel.images;
+
             } else if (
                 hotel.image
             ) {
+
                 images =
                     [hotel.image];
             }
+
 
             await pool.query(
                 `
@@ -985,7 +1215,7 @@ app.delete(
             );
 
 
-            deleteImageFiles(
+            await deleteImageFiles(
                 images
             );
 
@@ -1049,6 +1279,7 @@ app.get(
         }
     }
 );
+
 
 app.post(
     "/api/hotels/:id/reviews",
@@ -1129,6 +1360,7 @@ app.post(
     }
 );
 
+
 //Multer Error Handler
 
 app.use(
@@ -1139,7 +1371,8 @@ app.use(
         ) {
 
             if (
-                error.code === "LIMIT_FILE_COUNT"
+                error.code ===
+                "LIMIT_FILE_COUNT"
             ) {
 
                 return res.status(400).json({
@@ -1150,7 +1383,8 @@ app.use(
 
 
             if (
-                error.code === "LIMIT_FILE_SIZE"
+                error.code ===
+                "LIMIT_FILE_SIZE"
             ) {
 
                 return res.status(400).json({
