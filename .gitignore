@@ -1,0 +1,22 @@
+# Environment variables
+.env
+backend/.env
+
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Local uploads
+backend/uploads/
+
+# Build files
+frontend/dist/
+frontend/build/
+
+# Local database backup
+LunaraStay_backup.dump
+
+# Logs
+*.log
+npm-debug.log*
